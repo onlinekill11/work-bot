@@ -707,14 +707,20 @@ async def main() -> None:
     await health_server()
     asyncio.create_task(live_ticker(bot))
     asyncio.create_task(keepalive())
-    try:
-        await dp.start_polling(bot)
-    except TelegramConflictError:
-        log.error(
-            "Конфликт: этот бот уже запущен где-то ещё (локально или на хостинге). "
-            "Держи включённой только ОДНУ копию."
-        )
-        raise
+    # Конфликт = бота опрашивает другая копия. При передеплое хостинг несколько
+    # секунд держит старый инстанс живым, поэтому не падаем, а ждём и забираем
+    # опрос себе. Если лишняя копия запущена намеренно (например, локальный
+    # start.bat) — в логах будет повторяющееся предупреждение.
+    while True:
+        try:
+            await dp.start_polling(bot)
+            return
+        except TelegramConflictError:
+            log.warning(
+                "Конфликт: бота опрашивает другая копия. Жду 15 секунд и пробую снова. "
+                "Если это надолго — выключи лишнюю копию (локальный start.bat)."
+            )
+            await asyncio.sleep(15)
 
 
 if __name__ == "__main__":
