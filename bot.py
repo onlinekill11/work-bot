@@ -39,6 +39,7 @@ class Form(StatesGroup):
     hours = State()
     blocks = State()
     blocks_text = State()
+    blocks_sum = State()
     problems = State()
     plans = State()
     confirm = State()
@@ -463,16 +464,46 @@ async def f_blocks_free(message: Message, state: FSMContext) -> None:
         await state.set_state(Form.problems)
         await message.answer(ui.q_problems(), reply_markup=ui.kb_skip())
         return
-    await state.update_data(blocks_text=text)
-    await state.set_state(Form.problems)
-    await message.answer(ui.q_problems(), reply_markup=ui.kb_skip())
+    await _ask_blocks_sum(message, state, text)
 
 
 @dp.message(Form.blocks_text)
 async def f_blocks_text(message: Message, state: FSMContext) -> None:
-    await state.update_data(blocks_text=(message.text or "").strip())
+    await _ask_blocks_sum(message, state, (message.text or "").strip())
+
+
+async def _ask_blocks_sum(message: Message, state: FSMContext, blocks_text: str) -> None:
+    await state.update_data(blocks_text=blocks_text)
+    await state.set_state(Form.blocks_sum)
+    await message.answer(ui.q_blocks_sum(blocks_text), reply_markup=ui.kb_unknown_sum())
+
+
+@dp.message(Form.blocks_sum)
+async def f_blocks_sum(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip().lower()
+    if text in {"не знаю", "хз", "-", "нет"}:
+        value = None
+    else:
+        parsed = parse_money(text)
+        if parsed is None:
+            await message.answer(
+                "Нужна сумма блока в баксах, цифрой. Например: <code>250</code>\n"
+                "Если сумма неизвестна — жми кнопку ниже.",
+                reply_markup=ui.kb_unknown_sum(),
+            )
+            return
+        value = abs(parsed)
+    await state.update_data(blocks_sum=value)
     await state.set_state(Form.problems)
     await message.answer(ui.q_problems(), reply_markup=ui.kb_skip())
+
+
+@dp.callback_query(F.data == "form:nosum", Form.blocks_sum)
+async def cb_unknown_sum(call: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(blocks_sum=None)
+    await state.set_state(Form.problems)
+    await call.answer("Без суммы")
+    await call.message.answer(ui.q_problems(), reply_markup=ui.kb_skip())
 
 
 @dp.callback_query(F.data == "form:skip", Form.problems)
@@ -545,6 +576,7 @@ async def cb_send(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
             "hours": payout.hours,
             "has_blocks": int(payout.has_blocks),
             "blocks_text": data.get("blocks_text"),
+            "blocks_sum": data.get("blocks_sum"),
             "fix_pay": payout.fix_pay,
             "total": payout.total,
             "difficulties": data.get("problems"),
@@ -559,6 +591,7 @@ async def cb_send(call: CallbackQuery, state: FSMContext, bot: Bot) -> None:
         p=payout,
         shift_str=data["shift_str"],
         blocks_text=data.get("blocks_text"),
+        blocks_sum=data.get("blocks_sum"),
         problems=data.get("problems") or "",
         plans=data.get("plans") or "",
     )

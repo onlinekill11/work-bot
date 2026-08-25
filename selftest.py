@@ -153,6 +153,7 @@ async def main() -> None:
     await feed(msg("50", WORKER, 5), "3) диспуты 50")
     await feed(cb("form:hasblocks", WORKER, 6), "5) были блоки")
     await feed(msg("ЛК 3, ЛК 7 — бан по верификации", WORKER, 7), "5) какие ЛК")
+    await feed(msg("250", WORKER, 75), "5) сумма блока")
     await feed(msg("Долго висели выплаты, два ЛК ушли в бан", WORKER, 8), "6) сложности")
     await feed(msg("Поднять объём, догнать по диспутам", WORKER, 9), "7) планы")
     await feed(cb("form:send", WORKER, 10), "отправка заявки")

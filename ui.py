@@ -214,6 +214,22 @@ def q_blocks_text() -> str:
     )
 
 
+def q_blocks_sum(blocks_text: str) -> str:
+    return (
+        f"<b>📝 ЗАЯВКА НА ВЫВОД</b>\n{LINE}\n"
+        f"{progress(5)}\n\n"
+        f"✅ Блоки: <b>{blocks_text}</b>\n\n"
+        "<b>5) На какую сумму блок?</b>\n"
+        "<i>Сколько баксов заблокировано — цифрой.</i>\n\n"
+        "<i>Например:</i> <code>250</code>"
+    )
+
+
+def by_hours_pay(p: Payout) -> float:
+    """Сколько вышло бы по часам (3.5$ за целый час) — независимо от блоков."""
+    return round(max(0, p.whole_hours) * 3.5, 2)
+
+
 def q_problems() -> str:
     return (
         f"<b>📝 ЗАЯВКА НА ВЫВОД</b>\n{LINE}\n"
@@ -234,6 +250,8 @@ def q_plans() -> str:
 
 def confirm_card(d: dict) -> str:
     blocks = d.get("blocks_text") or "нет"
+    if d.get("blocks_text") and d.get("blocks_sum"):
+        blocks = f"{d['blocks_text']} • на сумму {money(d['blocks_sum'])}"
     disputes = d.get("disputes") or 0
     return (
         f"<b>🔎 ПРОВЕРЬ ЗАЯВКУ</b>\n{LINE}\n"
@@ -258,7 +276,7 @@ def payout_card(p: Payout, shift_str: str) -> str:
         f"Ставка: <b>{p.percent:g}%</b>",
         f"Расчёт: {money(p.profit)} / 100 × {p.percent:g} = <b>{money(p.percent_pay)}</b>",
     ]
-    if p.has_blocks:
+    if p.has_blocks and p.whole_hours >= 1:
         lines.append(
             f"Фикс за блоки: {p.whole_hours} ч × 3.5$ = <b>{money(p.fix_pay)}</b>"
         )
@@ -281,10 +299,15 @@ def admin_report(
     p: Payout,
     shift_str: str,
     blocks_text: str | None,
+    blocks_sum: float | None,
     problems: str,
     plans: str,
 ) -> str:
     clean_end = p.end - p.disputes
+    blocks = blocks_text or "нет"
+    if blocks_text and blocks_sum:
+        blocks = f"{blocks_text} • на сумму {money(blocks_sum)}"
+    hours_pay = by_hours_pay(p)
     lines = [
         f"<b>📋 ЗАЯВКА НА ВЫВОД №{report_id}</b>",
         f"👤 {who}   •   📅 {date_str}",
@@ -293,21 +316,15 @@ def admin_report(
         f"<b>2) Конец (факт. баланс):</b> {money(p.end)}",
         f"     ↳ диспуты: {money(p.disputes)} → чистый конец: {money(clean_end)}",
         f"<b>3) Профит:</b> {money(p.profit)}  →  ставка {p.percent:g}%",
-        f"     ↳ {money(p.profit)} / 100 × {p.percent:g} = <b>{money(p.percent_pay)}</b>",
         f"<b>4) Часы смены:</b> {shift_str}",
-        f"<b>5) Блоки:</b> {blocks_text or 'нет'}",
+        f"<b>5) Блоки:</b> {blocks}",
         f"<b>6) Сложности:</b> {problems or '—'}",
         f"<b>7) Планы на завтра:</b> {plans or '—'}",
-    ]
-    if p.has_blocks:
-        lines.append(
-            f"<b>8) Фикс за блоки:</b> {p.whole_hours} ч × 3.5$ = {money(p.fix_pay)}"
-        )
-    else:
-        lines.append("<b>8) Фикс за блоки:</b> — (блоков нет)")
-    lines += [
         LINE,
-        f"💵 <b>К ВЫПЛАТЕ РАБОТНИКУ: {money(p.total)}</b>  <i>({p.basis})</i>",
+        "<b>💵 К ВЫПЛАТЕ РАБОТНИКУ</b>",
+        f"   по профиту: {money(p.profit)} × {p.percent:g}% = <b>{money(p.percent_pay)}</b>",
+        f"   по часам:   {p.whole_hours} ч × 3.5$ = <b>{money(hours_pay)}</b>",
+        f"   <b>ИТОГ: {money(p.total)}</b>  <i>({p.basis})</i>",
     ]
     return "\n".join(lines)
 
@@ -351,6 +368,12 @@ def kb_blocks() -> InlineKeyboardMarkup:
     kb.button(text="✅ Блоков не было", callback_data="form:noblocks")
     kb.button(text="⛔️ Были блоки", callback_data="form:hasblocks")
     kb.adjust(1)
+    return kb.as_markup()
+
+
+def kb_unknown_sum() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🤷 Сумма неизвестна", callback_data="form:nosum")
     return kb.as_markup()
 
 

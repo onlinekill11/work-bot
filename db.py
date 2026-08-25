@@ -183,6 +183,21 @@ def init() -> None:
     with _cur() as cur:
         for statement in filter(None, (s.strip() for s in ddl.split(";"))):
             cur.execute(statement)
+    _migrate()
+
+
+def _migrate() -> None:
+    """Догоняем схему на уже существующих базах (боевая Neon живёт с первого дня)."""
+    _add_column("reports", "blocks_sum", "DOUBLE PRECISION" if IS_PG else "REAL")
+
+
+def _add_column(table: str, column: str, coltype: str) -> None:
+    if IS_PG:  # pragma: no cover
+        execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {coltype}")
+        return
+    existing = {r["name"] for r in _fetchall(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
 
 
 # --- settings -------------------------------------------------------------
@@ -292,7 +307,7 @@ def elapsed_seconds(row: Any) -> int:
 _REPORT_FIELDS = (
     "user_id", "session_id", "created_at", "start_bal", "end_bal", "disputes",
     "profit", "percent", "percent_pay", "hours", "has_blocks", "blocks_text",
-    "fix_pay", "total", "difficulties", "plans",
+    "fix_pay", "total", "difficulties", "plans", "blocks_sum",
 )
 
 
